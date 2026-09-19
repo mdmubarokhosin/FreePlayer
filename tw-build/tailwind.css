@@ -1,0 +1,102 @@
+/* Tailwind CSS source — feeds into the CLI build to produce a single
+ * self-contained, minified stylesheet at /assets/tailwind.css.
+ *
+ * The three @tailwind directives pull in:
+ *   @tailwind base;    — Preflight (CSS reset) + base form/typography styles
+ *   @tailwind components; — component classes (currently empty; we only
+ *                          use utilities, no .btn/.card etc.)
+ *   @tailwind utilities; — every utility class Tailwind ships
+ *
+ * Custom theme tokens live in tailwind.config.js next to this file.
+ * The CDN script we used previously embedded Tailwind's JIT compiler
+ * in-page, which both:
+ *   (a) failed under COEP=require-corp (Vercel's CDN doesn't send
+ *       Cross-Origin-Resource-Policy), and
+ *   (b) introduced a runtime cost (JIT-compile every page load).
+ *
+ * Moving to a pre-built CSS file removes both problems — no cross-origin
+ * fetch, no runtime JIT, the page renders its final styles on first paint.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom layer: gradient-text utility (Tailwind doesn't ship one). */
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #8a7cf2 0%, #6c5dd3 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Code block stays dark in both themes — syntax-highlight readability. */
+.code-block {
+  background: #0a0f1e;
+  color: #c9c9e4;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.code-block .tag  { color: #8b7bff; }
+.code-block .attr { color: #7ddba0; }
+.code-block .val  { color: #f4b042; }
+
+/* Hide scrollbars on the format strip (decorative marquee). */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Smooth-scroll for in-page anchor links. */
+html { scroll-behavior: smooth; }
+
+/* Loading spinner keyframes (used by embed.html). */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(124, 108, 240, 0.2);
+  border-top-color: #6c5dd3;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Decorative background blobs — soft on light, more saturated on dark. */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.18;
+  transition: opacity 0.2s;
+}
+body::before {
+  top: -20vw; right: -10vw;
+  background: radial-gradient(circle, #8a7cf2, transparent 70%);
+}
+body::after {
+  bottom: -25vw; left: -10vw;
+  background: radial-gradient(circle, #3c6df5, transparent 70%);
+}
+.dark body::before, .dark body::after { opacity: 0.35; }
+
+/* Loading overlay (embed page) — covers the player until first frame. */
+#loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  background: inherit;
+  color: #4b5266;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  z-index: 10;
+  transition: opacity 0.3s;
+}
+.dark #loading { color: #b8bcd0; }
+#loading.hidden { opacity: 0; pointer-events: none; }

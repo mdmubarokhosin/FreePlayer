@@ -1,0 +1,27 @@
+# Cloudflare Pages _redirects file
+#
+# Pretty-URL the embed endpoint. The page lives at /embed.html on disk
+# (so it can be served as a static file with no server-side logic), but
+# the public URL is /embed?url=… — extension-less, matching the
+# moviplayer.com/embed pattern.
+#
+# Why NO /embed.html rule? The previous deployment had a line
+# `/embed.html  /embed.html 200` meant to "break a redirect loop". It
+# actually CAUSED the loop: Cloudflare's _redirects parser matched
+# that rule for any request to /embed.html, then tried to rewrite to
+# /embed.html — which Cloudflare normalises to /embed (it strips
+# trailing .html on its own asset-serving path), which matched the
+# `/embed → /embed.html` rule again → infinite 308 redirect.
+#
+# The fix: ONLY have the `/embed → /embed.html` rule. Cloudflare's
+# static-asset serving already handles /embed.html directly (it's a
+# real file on disk), so it never enters the redirect pipeline.
+# The `/embed` request (no extension) gets rewritten to /embed.html
+# internally, no second hop.
+#
+# Status 200 = rewrite (URL stays as /embed in the address bar).
+# Status 301/302/308 = redirect (URL changes, breaks iframe URLs).
+/embed  /embed.html  200
+/e      /embed.html  200
+/v      /embed.html  200
+/watch  /embed.html  200

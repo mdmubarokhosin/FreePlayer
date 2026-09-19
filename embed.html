@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0a0f1e" media="(prefers-color-scheme: dark)" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Player</title>
+
+  <!--
+    Embeddable player — drop this URL into an <iframe src="…/embed?url=<video>">
+    on any page. Reads ?url= + a handful of optional ?… params, sets them on
+    a single <movi-player> that fills the iframe. No chrome, no UI bar, no
+    share-link, no error banner outside the player's own overlay.
+
+    Engine: movi-player v0.4.0 (slim build, served from /assets/).
+    Full feature surface — all 67 attributes, every control, every subtitle
+    format, multi-audio, ambient mode, HDR canvas, VR projections, etc.
+
+    LIGHT MODE IS THE DEFAULT. The body uses light cream (#f6f8fc) by
+    default, the player carries theme="light". Under prefers-color-scheme:
+    dark OR when the URL provides ?theme=dark, both flip to dark.
+
+    To switch to the full embedded-WASM build (single 11.8 MB JS, no
+    separate movi.wasm fetch):
+      1. Replace the line below with <script src="/assets/element.js">
+      2. Delete the `wasmurl` attribute assignment in the script below.
+      3. Optionally delete /assets/movi.wasm.
+  -->
+  <script type="module" src="/assets/element.slim.js"></script>
+
+  <!-- Tailwind + Bootstrap Icons — both served locally from /assets/
+       so they survive COEP=require-corp without a cross-origin fetch.
+       See index.html header comment for the rationale. -->
+  <link rel="stylesheet" href="/assets/tailwind.css" />
+  <link rel="stylesheet" href="/assets/bootstrap-icons.css" />
+
+  <style>
+    /* 100% bleed: the iframe itself is the player. No padding, no scroll.
+       Light cream by default — matches the landing page's light theme.
+       The body.theme-dark class is set by the inline script when it sees
+       ?theme=dark in the URL OR the OS prefers dark. */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #f6f8fc; }
+    body.theme-dark { background: #0a0f1e; }
+    movi-player {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    /* The loading indicator — shown only for the brief moment between
+       the page rendering and the movi-player engine initialising. Hides
+       itself the instant the player dispatches `loadeddata`. */
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      background: inherit;
+      color: #4b5266;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 10;
+      transition: opacity 0.3s;
+    }
+    body.theme-dark #loading { color: #b8bcd0; }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(124, 108, 240, 0.2);
+      border-top-color: #6c5dd3;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <!--
+    Single declarative instance. `theme="light"` is set as the explicit
+    default — flips the player's own control bar, overlay colours, and
+    subtitle styling to the light palette to match the cream body
+    background above. If a query param provides `?theme=dark` or
+    `?theme=light`, that overrides this default.
+
+    For visitors with `prefers-color-scheme: dark`, the script below
+    detects that and removes the `theme="light"` attribute so the
+    player's own default-dark palette takes over.
+  -->
+  <movi-player
+    id="player"
+    theme="light"
+    controls
+    thumb
+    fastseek
+    showtitle
+    playsinline
+    stablevolume
+    fallback="native"
+  ></movi-player>
+
+  <!-- Loading indicator — covers the embed until the player's first
+       frame. Removed by the inline script on `loadeddata`. -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="text-xs font-medium"><i class="bi bi-play-circle mr-1"></i> Loading player…</div>
+  </div>
+
+  <script type="module">
+    // === Query string → movi-player attributes ===
+    //
+    // Pattern:  https://<your-project>.pages.dev/embed?url=<video-link>
+    //
+    // Optional params (all URL-encoded):
+    //   url=         required. The video source.
+    //   title=       on-screen title.
+    //   poster=      URL of a still image to show until play starts.
+    //   controls=0   hide the built-in control bar.
+    //   theme=dark|light   force a theme (overrides OS preference).
+    //   themecolor=  hex colour, or "primary secondary" space-separated.
+    //   autoplay=1, muted=1, loop=1, objectfit=, subtitlesize=, etc.
+    //
+    // Every other query param is passed through as an attribute, so the
+    // embed accepts every one of movi-player's 67 attributes without
+    // this page needing to know about them ahead of time.
+
+    const player = document.getElementById("player");
+    const loadingEl = document.getElementById("loading");
+    const params = new URLSearchParams(location.search);
+
+    // Pin WASM to local /assets/movi.wasm — no cross-origin fetch.
+    player.setAttribute("wasmurl", "/assets/movi.wasm");
+
+    // ── Theme handling ─────────────────────────────────────────────
+    // LIGHT is the default. The `<movi-player>` element above carries
+    // `theme="light"` as its baseline. Two ways it can flip to dark:
+    //
+    //   1. ?theme=dark in the URL — flips both the body and (via the
+    //      generic loop below) the player's `theme` attribute.
+    //   2. prefers-color-scheme: dark — we detect that here, flip the
+    //      body, and remove theme="light" so the player's own default
+    //      dark palette takes over.
+    //
+    // An explicit ?theme=light wins over the OS-dark detection.
+    const explicitTheme = params.get("theme");
+    if (explicitTheme === "dark") {
+      document.body.classList.add("theme-dark");
+    } else if (explicitTheme === "light") {
+      document.body.classList.remove("theme-dark");
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.body.classList.add("theme-dark");
+      player.removeAttribute("theme");
+    }
+
+    // `url` is the one required parameter.
+    const src = params.get("url");
+    if (src) {
+      try { new URL(src); player.setAttribute("src", src); }
+      catch { player.setAttribute("src", src); }
+    }
+
+    // Reflect every other query param onto the element as an attribute.
+    const HANDLED = new Set(["url", "wasmurl"]);
+    for (const [key, value] of params) {
+      if (HANDLED.has(key)) continue;
+      const attr = key.toLowerCase();
+      if (attr.startsWith("utm_")) continue;
+      if (attr === "referrer" || attr === "source") continue;
+      const isBool = ["1","true","yes","on",""].includes(value.toLowerCase());
+      const isFalsey = ["0","false","no","off"].includes(value.toLowerCase());
+      if (isBool) {
+        player.setAttribute(attr, "");
+      } else if (isFalsey && ["controls","autoplay","loop","muted","thumb","fastseek","showtitle","stablevolume","ambientmode","resume","playsinline","nohotkeys"].includes(attr)) {
+        player.removeAttribute(attr);
+      } else {
+        player.setAttribute(attr, value);
+      }
+    }
+
+    // Hide the loading spinner the instant the player has its first
+    // frame. If the player errors out, hide the spinner too — the
+    // player's own error overlay takes over.
+    player.addEventListener("loadeddata", () => loadingEl.classList.add("hidden"));
+    player.addEventListener("error", () => loadingEl.classList.add("hidden"));
+    // Failsafe: hide the spinner after 8s no matter what, so a
+    // stalled WASM fetch doesn't leave a "Loading player…" forever.
+    setTimeout(() => loadingEl.classList.add("hidden"), 8000);
+
+    // Post events to the parent page so a host can react to player
+    // state without reaching into the iframe's document.
+    const ALLOWED_ORIGINS = "*";
+    player.addEventListener("error", (e) => {
+      const detail = e.detail;
+      const msg = detail?.message || detail?.name || String(detail || "Unknown error");
+      parent.postMessage({ type: "movi-embed-error", message: msg }, ALLOWED_ORIGINS);
+    });
+    player.addEventListener("loadeddata", () => {
+      parent.postMessage({ type: "movi-embed-loaded", src }, ALLOWED_ORIGINS);
+    });
+    player.addEventListener("titlechange", (e) => {
+      const t = e.detail?.title;
+      if (t) document.title = t;
+      parent.postMessage({ type: "movi-embed-title", title: t }, ALLOWED_ORIGINS);
+    });
+  </script>
+</body>
+</html>

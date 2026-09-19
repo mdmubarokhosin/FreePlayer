@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0a0f1e" media="(prefers-color-scheme: dark)" />
+
+  <!-- SEO -->
+  <title>Movi Player — Play MKV, HEVC, AV1, HDR in Your Browser</title>
+  <meta name="description" content="Self-hosted video player for MKV, HEVC, AV1, HDR, HLS, DASH. Drop an iframe on any page, point at /embed?url=<your-video>. No upload, no transcoding — 100% local." />
+  <meta name="keywords" content="video player, mkv player, hevc player, av1 player, hdr player, hls player, dash player, web video player, embeddable player, iframe player, cloudflare pages video player" />
+  <meta name="author" content="MoviPlayer" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="/" />
+
+  <!-- OpenGraph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Movi Player — Play MKV, HEVC, AV1, HDR in Your Browser" />
+  <meta property="og:description" content="Self-hosted video player. Drop an iframe on any page, point at /embed?url=<your-video>." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Movi Player — Embeddable Web Video Player" />
+  <meta name="twitter:description" content="Self-hosted video player. MKV/HEVC/AV1/HDR/HLS/DASH. Drop an iframe on any page." />
+
+  <!-- PWA / Mobile -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Movi Player" />
+
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <!--
+    Engine: movi-player v0.4.0 (slim build, served from /assets/).
+    Full feature surface — all 67 attributes, every control, every
+    subtitle format, multi-audio, ambient mode, HDR canvas, VR
+    projections, chapters, thumbnails, resume, encrypted playback.
+    WASM engine (movi.wasm, 5.4 MB) fetched on demand from /assets/.
+
+    To switch to the full embedded-WASM build (single 11.8 MB JS):
+      1. Replace the line below with <script src="/assets/element.js">
+      2. Delete the `wasmurl` attribute on the <movi-player> below.
+      3. Optionally delete /assets/movi.wasm.
+
+    LIGHT MODE IS THE DEFAULT. Tailwind dark: variant falls back to
+    OS preference; a manual toggle button in the nav persists via
+    localStorage.
+  -->
+  <script type="module" src="/assets/element.slim.js"></script>
+
+  <!--
+    Tailwind CSS + Bootstrap Icons — both SERVED LOCALLY from /assets/.
+
+    The previous deployment used the Tailwind CDN script
+    (https://cdn.tailwindcss.com/) and the Bootstrap Icons CDN CSS.
+    Both failed under COEP=require-corp — Vercel's Tailwind CDN and
+    jsDelivr's Bootstrap Icons CSS don't send
+    `Cross-Origin-Resource-Policy: cross-origin`, so the browser
+    blocked them, and the page rendered with browser default serif
+    fonts and no Tailwind utilities. The result was a "broken design".
+
+    Fix: pre-build Tailwind CSS at build time (only the utility
+    classes actually used in index.html / embed.html / 404.html —
+    18 KB minified) and self-host Bootstrap Icons (CSS + WOFF2/WOFF
+    fonts). Everything is same-origin under /assets/, so COEP no
+    longer blocks anything.
+
+    The Tailwind source is at tw-build/tailwind.css + tw-build/tailwind.config.js.
+    Rebuild with:
+      cd tw-build && npx tailwindcss -i ./tailwind.css -o ../assets/tailwind.css --minify
+    (Or use the rebuild.sh script at the repo root.)
+  -->
+  <link rel="stylesheet" href="/assets/tailwind.css" />
+  <link rel="stylesheet" href="/assets/bootstrap-icons.css" />
+
+  <style>
+    /* Light theme is the baseline. .dark class on <html> flips it.
+       The Tailwind CSS file at /assets/tailwind.css contains every
+       utility class this page uses, with `dark:` variants that
+       activate when <html> has the .dark class. */
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", system-ui, sans-serif;
+      background: #f6f8fc;
+      color: #0a0f1e;
+      line-height: 1.5;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background 0.2s, color 0.2s;
+    }
+    html.dark body {
+      background: #0a0f1e;
+      color: #f4f5fb;
+    }
+
+    /* Decorative background blobs — soft on light, more saturated on dark. */
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      width: 60vw;
+      height: 60vw;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.18;
+      transition: opacity 0.2s;
+    }
+    body::before {
+      top: -20vw; right: -10vw;
+      background: radial-gradient(circle, #8a7cf2, transparent 70%);
+    }
+    body::after {
+      bottom: -25vw; left: -10vw;
+      background: radial-gradient(circle, #3c6df5, transparent 70%);
+    }
+    html.dark body::before, html.dark body::after { opacity: 0.35; }
+
+    /* Gradient text utility (Tailwind doesn't ship one). */
+    .text-gradient {
+      background: linear-gradient(135deg, #8a7cf2 0%, #6c5dd3 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    /* Code snippet box stays dark in both themes — syntax-highlight
+       readability. */
+    .code-block {
+      background: #0a0f1e;
+      color: #c9c9e4;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .code-block .tag  { color: #8b7bff; }
+    .code-block .attr { color: #7ddba0; }
+    .code-block .val  { color: #f4b042; }
+
+    /* Smooth-scroll for in-page anchor links. */
+    html { scroll-behavior: smooth; }
+
+    /* Hide scrollbars on the format strip (decorative marquee). */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <div class="max-w-7xl mx-auto px-6 relative z-10">
+
+    <!-- ── Top nav ─────────────────────────────────────────────── -->
+    <nav class="flex items-center gap-3 py-6">
+      <a href="/" class="flex items-center gap-3 no-underline text-inherit">
+        <div class="w-9 h-9 rounded-xl bg-accent-grad grid place-items-center shadow-glow">
+          <i class="bi bi-play-fill text-white text-xl"></i>
+        </div>
+        <span class="text-base font-bold tracking-tight">Movi Player</span>
+      </a>
+      <div class="flex-1"></div>
+      <a href="#features" class="hidden md:block px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary hover:bg-surface transition-colors dark:hover:text-white dark:hover:bg-white/5">Features</a>
+      <a href="#how" class="hidden md:block px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary hover:bg-surface transition-colors dark:hover:text-white dark:hover:bg-white/5">How it works</a>
+      <a href="https://github.com/MrUjjwalG/movi-player" target="_blank" rel="noopener" class="hidden md:block px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary hover:bg-surface transition-colors dark:hover:text-white dark:hover:bg-white/5">
+        <i class="bi bi-github mr-1"></i> Source
+      </a>
+      <!-- Theme toggle -->
+      <button id="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle light / dark"
+              class="w-10 h-10 grid place-items-center rounded-lg bg-surface border border-border text-secondary hover:bg-white/5 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 dark:text-gray-400 dark:hover:text-white transition-all">
+        <i class="bi bi-sun-fill" id="icon-sun"></i>
+        <i class="bi bi-moon-stars-fill hidden" id="icon-moon"></i>
+      </button>
+      <a href="#play" class="bg-accent-grad text-white px-4 py-2.5 rounded-lg text-sm font-semibold no-underline hover:shadow-glow transition-all">Try it</a>
+    </nav>
+
+    <!-- ── Hero ────────────────────────────────────────────────── -->
+    <section class="py-16 text-center relative">
+      <span class="inline-block px-3.5 py-1.5 bg-accent/10 dark:bg-white/5 text-accent dark:text-purple-300 rounded-full text-xs font-semibold uppercase tracking-wider mb-6 border border-accent/20 dark:border-white/10">
+        Self-hosted · Embeddable · No upload
+      </span>
+      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight mb-5 max-w-4xl mx-auto">
+        Play any video in your browser.<br>
+        <span class="text-gradient">Embed it anywhere.</span>
+      </h1>
+      <p class="text-base md:text-lg text-secondary dark:text-gray-300 max-w-2xl mx-auto mb-9 leading-relaxed">
+        Drop an <code class="px-1.5 py-0.5 rounded bg-surface dark:bg-white/5 font-mono text-sm">&lt;iframe&gt;</code>
+        on any page, point it at <code class="px-1.5 py-0.5 rounded bg-surface dark:bg-white/5 font-mono text-sm">/embed?url=…</code>,
+        and play MKV, HEVC, AV1, HDR, HLS, DASH, multi-audio, embedded subtitles — directly in the browser.
+        No transcoding. No server processing. 100% local.
+      </p>
+      <div class="flex gap-3 justify-center flex-wrap mb-8">
+        <a href="#play" class="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-accent-grad text-white text-sm font-semibold no-underline hover:shadow-glow hover:-translate-y-0.5 transition-all">
+          <i class="bi bi-play-fill"></i> Try the player
+        </a>
+        <a href="#how" class="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-surface border border-border text-primary dark:bg-white/5 dark:border-white/10 dark:text-white text-sm font-semibold no-underline hover:bg-surface dark:hover:bg-white/10 transition-colors">
+          <i class="bi bi-info-circle"></i> How it works
+        </a>
+      </div>
+      <!-- Format strip -->
+      <div class="flex gap-2 flex-wrap justify-center max-w-3xl mx-auto no-scrollbar overflow-x-auto pb-2">
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">MKV</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">MP4</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">WebM</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">HEVC</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">AV1</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">VP9</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">HDR10</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">HLG</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">HLS</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">DASH</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">SRT</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">ASS</span>
+        <span class="px-3 py-1.5 bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-full text-xs font-medium font-mono text-secondary dark:text-gray-400">WebVTT</span>
+      </div>
+    </section>
+
+    <!-- ── Demo player ─────────────────────────────────────────── -->
+    <section class="pb-12" id="play">
+      <div class="bg-elevated dark:bg-elevated-dark border border-border dark:border-white/10 rounded-3xl p-5 shadow-2xl shadow-black/5 dark:shadow-black/40">
+        <div class="flex gap-2 px-1 pb-4 items-center">
+          <input id="url-input" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+                 placeholder="Paste a video URL — mp4, mkv, m3u8, mpd…"
+                 class="flex-1 min-w-0 px-4 py-3 rounded-xl border border-border dark:border-white/10 bg-card dark:bg-white/5 text-primary dark:text-white text-sm font-mono outline-none focus:border-accent transition-colors">
+          <button id="play-btn" type="button"
+                  class="px-5 py-3 rounded-xl bg-accent-grad text-white text-sm font-semibold hover:shadow-glow transition-all whitespace-nowrap">
+            <i class="bi bi-play-fill"></i> Play
+          </button>
+          <button id="paste-btn" type="button" title="Paste from clipboard"
+                  class="px-4 py-3 rounded-xl bg-surface border border-border dark:bg-white/5 dark:border-white/10 text-primary dark:text-white text-sm hover:bg-surface dark:hover:bg-white/10 transition-colors">
+            <i class="bi bi-clipboard"></i>
+          </button>
+        </div>
+
+        <div id="err" class="hidden p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm mb-4"></div>
+
+        <div id="player-wrap" class="hidden relative w-full aspect-video max-h-[75vh] bg-black rounded-2xl overflow-hidden shadow-lg">
+          <movi-player id="player" controls thumb fastseek showtitle playsinline></movi-player>
+        </div>
+
+        <div id="samples" class="flex flex-wrap gap-2 pt-4">
+          <div class="text-xs text-tertiary dark:text-gray-500 w-full mb-1">Try a sample:</div>
+          <button class="sample-chip px-3.5 py-2 rounded-full bg-surface border border-border dark:bg-white/5 dark:border-white/10 text-secondary dark:text-gray-400 text-sm hover:bg-surface dark:hover:bg-white/10 hover:border-accent dark:hover:border-purple-400 dark:hover:text-white transition-all whitespace-nowrap"
+                  data-url="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" data-title="Flower (MP4 H.264)">
+            <i class="bi bi-file-play mr-1"></i> Flower <small class="text-tertiary dark:text-gray-600">MP4</small>
+          </button>
+          <button class="sample-chip px-3.5 py-2 rounded-full bg-surface border border-border dark:bg-white/5 dark:border-white/10 text-secondary dark:text-gray-400 text-sm hover:bg-surface dark:hover:bg-white/10 hover:border-accent dark:hover:border-purple-400 dark:hover:text-white transition-all whitespace-nowrap"
+                  data-url="https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8" data-title="Tears of Steel (HLS)">
+            <i class="bi bi-collection-play mr-1"></i> Tears of Steel <small class="text-tertiary dark:text-gray-600">HLS</small>
+          </button>
+          <button class="sample-chip px-3.5 py-2 rounded-full bg-surface border border-border dark:bg-white/5 dark:border-white/10 text-secondary dark:text-gray-400 text-sm hover:bg-surface dark:hover:bg-white/10 hover:border-accent dark:hover:border-purple-400 dark:hover:text-white transition-all whitespace-nowrap"
+                  data-url="https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd" data-title="Big Buck Bunny (DASH AV1)">
+            <i class="bi bi-broadcast mr-1"></i> Big Buck Bunny <small class="text-tertiary dark:text-gray-600">DASH</small>
+          </button>
+        </div>
+
+        <!-- Embed code box -->
+        <div id="embed-code" class="hidden mt-5 p-4 bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-xl">
+          <div class="text-[11px] text-tertiary dark:text-gray-500 uppercase tracking-wider mb-2 font-semibold">
+            <i class="bi bi-code-slash mr-1"></i> Embed this video — copy &amp; paste on your page
+          </div>
+          <textarea id="embed-code-textarea" readonly onclick="this.select()"
+                    class="w-full h-28 bg-[#07070f] text-gray-300 border border-white/10 rounded-lg p-3 font-mono text-xs resize-y whitespace-pre-wrap break-all overflow-auto outline-none focus:border-accent"></textarea>
+          <div class="flex gap-2 items-center mt-2 flex-wrap">
+            <button id="copy-embed-btn" type="button"
+                    class="px-3.5 py-1.5 text-xs font-medium bg-surface border border-border dark:bg-white/5 dark:border-white/10 text-primary dark:text-white rounded-md hover:bg-surface dark:hover:bg-white/10 hover:border-accent transition-all">
+              <i class="bi bi-clipboard mr-1"></i> Copy iframe
+            </button>
+            <button id="open-embed-btn" type="button"
+                    class="px-3.5 py-1.5 text-xs font-medium bg-surface border border-border dark:bg-white/5 dark:border-white/10 text-primary dark:text-white rounded-md hover:bg-surface dark:hover:bg-white/10 hover:border-accent transition-all">
+              <i class="bi bi-box-arrow-up-right mr-1"></i> Open /embed
+            </button>
+            <span id="copy-ok" class="text-green-400 text-xs"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Features grid ───────────────────────────────────────── -->
+    <section class="py-16" id="features">
+      <div class="text-center max-w-2xl mx-auto mb-12">
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight mb-3.5">Everything the upstream player has</h2>
+        <p class="text-base text-secondary dark:text-gray-300 leading-relaxed">
+          This is the full movi-player v0.4.0 web component — 67 attributes, every control, every subtitle format, multi-audio, HDR, VR, ambient mode, encrypted playback. Nothing stripped.
+        </p>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-2xl p-6 hover:border-foreground/20 dark:hover:border-white/20 hover:-translate-y-0.5 transition-all">
+          <div class="w-11 h-11 rounded-xl bg-accent/10 dark:bg-purple-500/15 grid place-items-center mb-4 text-accent dark:text-purple-300 text-lg">
+            <i class="bi bi-film"></i>
+          </div>
+          <h3 class="text-base font-bold mb-1.5 tracking-tight">Every container &amp; codec</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed">MP4, MKV, WebM, MOV, AVI, FLV, TS, HEVC, AV1, VP9, VVC — demuxed by FFmpeg-WASM, decoded by WebCodecs hardware acceleration with software fallback.</p>
+        </div>
+        <div class="bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-2xl p-6 hover:border-foreground/20 dark:hover:border-white/20 hover:-translate-y-0.5 transition-all">
+          <div class="w-11 h-11 rounded-xl bg-accent/10 dark:bg-purple-500/15 grid place-items-center mb-4 text-accent dark:text-purple-300 text-lg">
+            <i class="bi bi-broadcast-pin"></i>
+          </div>
+          <h3 class="text-base font-bold mb-1.5 tracking-tight">HLS &amp; DASH adaptive streaming</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed">Manifests play via bundled hls.js, dashjs, and Shaka. Auto-quality switching, alternate audio-language tracks, WebVTT and TTML captions all work out of the box.</p>
+        </div>
+        <div class="bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-2xl p-6 hover:border-foreground/20 dark:hover:border-white/20 hover:-translate-y-0.5 transition-all">
+          <div class="w-11 h-11 rounded-xl bg-accent/10 dark:bg-purple-500/15 grid place-items-center mb-4 text-accent dark:text-purple-300 text-lg">
+            <i class="bi bi-sun"></i>
+          </div>
+          <h3 class="text-base font-bold mb-1.5 tracking-tight">HDR via canvas</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed">HDR10, HLG, Dolby Vision — rendered through WebGL2 with display-p3 colour space on Chromium, PQ tone-mapping fallback on browsers without it.</p>
+        </div>
+        <div class="bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-2xl p-6 hover:border-foreground/20 dark:hover:border-white/20 hover:-translate-y-0.5 transition-all">
+          <div class="w-11 h-11 rounded-xl bg-accent/10 dark:bg-purple-500/15 grid place-items-center mb-4 text-accent dark:text-purple-300 text-lg">
+            <i class="bi bi-card-text"></i>
+          </div>
+          <h3 class="text-base font-bold mb-1.5 tracking-tight">Subtitle every format</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed">SRT, ASS/SSA (with karaoke + pluggable libass renderer), WebVTT, PGS image subtitles. Per-line styling, delay, edge type, background opacity all adjustable.</p>
+        </div>
+        <div class="bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-2xl p-6 hover:border-foreground/20 dark:hover:border-white/20 hover:-translate-y-0.5 transition-all">
+          <div class="w-11 h-11 rounded-xl bg-accent/10 dark:bg-purple-500/15 grid place-items-center mb-4 text-accent dark:text-purple-300 text-lg">
+            <i class="bi bi-volume-up"></i>
+          </div>
+          <h3 class="text-base font-bold mb-1.5 tracking-tight">Multi-audio track switching</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed">Language-aware menu, persistent selection across loads. Stable-volume loudness normalisation. Audio output routing to specific devices via AudioContext.setSinkId.</p>
+        </div>
+        <div class="bg-card dark:bg-white/5 border border-border dark:border-white/10 rounded-2xl p-6 hover:border-foreground/20 dark:hover:border-white/20 hover:-translate-y-0.5 transition-all">
+          <div class="w-11 h-11 rounded-xl bg-accent/10 dark:bg-purple-500/15 grid place-items-center mb-4 text-accent dark:text-purple-300 text-lg">
+            <i class="bi bi-stars"></i>
+          </div>
+          <h3 class="text-base font-bold mb-1.5 tracking-tight">Power features</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed">Ambient mode, chapter markers, resume playback, VR projections (360/180/fisheye/SBS-3D/little-planet), thumbnail scrubber previews, custom controls API.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── How it works ────────────────────────────────────────── -->
+    <section class="py-16" id="how">
+      <div class="text-center max-w-2xl mx-auto mb-12">
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight mb-3">Three steps to embed</h2>
+        <p class="text-base text-secondary dark:text-gray-300">From zero to a working embedded video in under a minute.</p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-7">
+        <div class="text-center">
+          <div class="w-12 h-12 rounded-full bg-accent-grad text-white grid place-items-center text-lg font-bold mx-auto mb-4 shadow-glow">1</div>
+          <h3 class="text-base font-bold mb-1.5">Deploy this site</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed max-w-xs mx-auto">Push the repo to GitHub, connect Cloudflare Pages, get <code class="px-1 py-0.5 rounded bg-surface dark:bg-white/5 font-mono text-xs">&lt;project&gt;.pages.dev</code>. No build step — it's pure static HTML.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-12 h-12 rounded-full bg-accent-grad text-white grid place-items-center text-lg font-bold mx-auto mb-4 shadow-glow">2</div>
+          <h3 class="text-base font-bold mb-1.5">Point at a video URL</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed max-w-xs mx-auto">Open <code class="px-1 py-0.5 rounded bg-surface dark:bg-white/5 font-mono text-xs">/embed?url=…</code> with any direct video link. MP4, MKV, HLS manifest, DASH manifest — anything the player can open.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-12 h-12 rounded-full bg-accent-grad text-white grid place-items-center text-lg font-bold mx-auto mb-4 shadow-glow">3</div>
+          <h3 class="text-base font-bold mb-1.5">Drop the iframe</h3>
+          <p class="text-sm text-secondary dark:text-gray-300 leading-relaxed max-w-xs mx-auto">Copy the iframe snippet from the demo above. Paste it on your blog, docs, Notion page — anywhere that accepts HTML.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CTA ─────────────────────────────────────────────────── -->
+    <section class="py-16 pb-20 text-center">
+      <div class="bg-elevated dark:bg-elevated-dark border border-border dark:border-white/10 rounded-3xl p-12 max-w-3xl mx-auto shadow-xl">
+        <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight mb-3">Ready to embed?</h2>
+        <p class="text-base text-secondary dark:text-gray-300 mb-6 max-w-xl mx-auto">One URL, one iframe. The player engine, WASM, and every feature ships from your own Cloudflare Pages origin — no third-party CDN dependency.</p>
+        <div class="code-block rounded-xl p-4 font-mono text-xs text-left overflow-x-auto whitespace-pre mb-6">
+<span class="tag">&lt;iframe</span>
+  <span class="attr">src</span>=<span class="val">"https://&lt;your-project&gt;.pages.dev/embed?url=&lt;video-link&gt;"</span>
+  <span class="attr">style</span>=<span class="val">"width:100%;max-width:800px;aspect-ratio:16/9;border:0"</span>
+  <span class="attr">allowfullscreen</span>
+<span class="tag">&gt;&lt;/iframe&gt;</span></div>
+        <a href="#play" class="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-accent-grad text-white text-sm font-semibold no-underline hover:shadow-glow hover:-translate-y-0.5 transition-all">
+          <i class="bi bi-play-fill"></i> Build your embed
+        </a>
+      </div>
+    </section>
+
+    <!-- ── Footer ─────────────────────────────────────────────── -->
+    <footer class="py-8 border-t border-border dark:border-white/10 text-center">
+      <p class="text-xs text-tertiary dark:text-gray-500">
+        Powered by <a href="https://github.com/MrUjjwalG/movi-player" target="_blank" rel="noopener" class="text-accent dark:text-purple-300 no-underline hover:underline">movi-player</a>
+        · Apache-2.0 · Deploy on Cloudflare Pages
+        · <i class="bi bi-bootstrap"></i> Tailwind + Bootstrap Icons
+      </p>
+    </footer>
+
+  </div>
+
+  <script type="module">
+    // === Read the source URL + extras from the query string ===
+    const params = new URLSearchParams(location.search);
+    const src = params.get("url");
+    const title = params.get("title") || "";
+    const poster = params.get("poster") || "";
+    const controlsParam = params.get("controls");
+    const controlsOff = controlsParam !== null && ["0","false","off","no",""].includes(controlsParam.toLowerCase());
+
+    const player = document.getElementById("player");
+    const playerWrap = document.getElementById("player-wrap");
+    const urlInput = document.getElementById("url-input");
+    const playBtn = document.getElementById("play-btn");
+    const pasteBtn = document.getElementById("paste-btn");
+    const samples = document.getElementById("samples");
+    const errBox = document.getElementById("err");
+    const embedCodeBox = document.getElementById("embed-code");
+    const embedTextarea = document.getElementById("embed-code-textarea");
+    const copyEmbedBtn = document.getElementById("copy-embed-btn");
+    const openEmbedBtn = document.getElementById("open-embed-btn");
+    const copyOk = document.getElementById("copy-ok");
+
+    function showError(msg) {
+      errBox.innerHTML = `<i class="bi bi-exclamation-triangle mr-1"></i> ${msg}`;
+      errBox.classList.remove("hidden");
+    }
+    function clearError() {
+      errBox.classList.add("hidden");
+      errBox.textContent = "";
+    }
+
+    player.setAttribute("wasmurl", "/assets/movi.wasm");
+
+    function buildEmbedSnippet(url, opts = {}) {
+      const embedUrl = new URL(location.origin + "/embed");
+      embedUrl.searchParams.set("url", url);
+      if (opts.title || title) embedUrl.searchParams.set("title", opts.title || title);
+      if (opts.poster || poster) embedUrl.searchParams.set("poster", opts.poster || poster);
+      return `<iframe
+  src="${embedUrl.toString()}"
+  style="display:block;box-sizing:border-box;border:0;margin:0;padding:0;width:100%;max-width:800px;aspect-ratio:16/9;height:auto;background:#000"
+  width="800"
+  height="450"
+  frameborder="0"
+  allowfullscreen
+  allow="fullscreen"
+></iframe>`;
+    }
+
+    function loadSource(url, opts = {}) {
+      if (!url) return;
+      clearError();
+      try { new URL(url); }
+      catch {
+        showError(`"${url}" is not a valid URL.`);
+        return;
+      }
+      player.setAttribute("src", url);
+      if (opts.title || title) player.setAttribute("title", opts.title || title);
+      if (opts.poster || poster) player.setAttribute("poster", opts.poster || poster);
+      if (controlsOff) player.removeAttribute("controls");
+      else player.setAttribute("controls", "");
+
+      playerWrap.classList.remove("hidden");
+      samples.classList.add("hidden");
+      embedTextarea.value = buildEmbedSnippet(url, opts);
+      embedCodeBox.classList.remove("hidden");
+    }
+
+    if (src) loadSource(src);
+
+    playBtn.addEventListener("click", () => {
+      const v = urlInput.value.trim();
+      if (v) loadSource(v);
+    });
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const v = urlInput.value.trim();
+        if (v) loadSource(v);
+      }
+    });
+    pasteBtn.addEventListener("click", async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) urlInput.value = text.trim();
+        urlInput.focus();
+      } catch {
+        showError("Clipboard read blocked. Paste manually with Ctrl/Cmd+V.");
+      }
+    });
+    document.querySelectorAll(".sample-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const url = chip.getAttribute("data-url");
+        const t = chip.getAttribute("data-title") || "";
+        if (url) loadSource(url, { title: t });
+      });
+    });
+    copyEmbedBtn.addEventListener("click", async () => {
+      const text = embedTextarea.value;
+      try {
+        await navigator.clipboard.writeText(text);
+        copyOk.innerHTML = '<i class="bi bi-check2-circle"></i> Copied';
+      } catch {
+        embedTextarea.select();
+        try { document.execCommand("copy"); copyOk.innerHTML = '<i class="bi bi-check2-circle"></i> Copied'; }
+        catch { copyOk.textContent = "Press Ctrl/Cmd+C"; }
+      }
+      setTimeout(() => { copyOk.textContent = ""; }, 2000);
+    });
+    openEmbedBtn.addEventListener("click", () => {
+      const u = new URL(location.origin + "/embed");
+      const currentSrc = player.getAttribute("src");
+      if (currentSrc) u.searchParams.set("url", currentSrc);
+      if (player.getAttribute("title")) u.searchParams.set("title", player.getAttribute("title"));
+      window.open(u.toString(), "_blank", "noopener");
+    });
+    player.addEventListener("error", (e) => {
+      const detail = e.detail;
+      const msg = detail?.message || detail?.name || String(detail || "Unknown error");
+      showError(`Player error: ${msg}`);
+    });
+    player.addEventListener("titlechange", (e) => {
+      const t = e.detail?.title;
+      if (t) document.title = `${t} — Movi Player`;
+    });
+
+    // ── Theme toggle ─────────────────────────────────────────────
+    // LIGHT is the default. The toggle persists via localStorage and
+    // updates both the Tailwind .dark class on <html> and the meta
+    // theme-color tag.
+    const THEME_KEY = "movi-theme";
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    const osDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initialDark = savedTheme === "dark" || (!savedTheme && osDark);
+    function applyTheme(dark) {
+      const html = document.documentElement;
+      if (dark) html.classList.add("dark");
+      else html.classList.remove("dark");
+      // Toggle the icon shown.
+      document.getElementById("icon-sun").classList.toggle("hidden", !dark);
+      document.getElementById("icon-moon").classList.toggle("hidden", dark);
+      // Update both meta theme-color tags.
+      const color = dark ? "#0a0f1e" : "#f6f8fc";
+      document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", color));
+    }
+    applyTheme(initialDark);
+    const toggle = document.getElementById("theme-toggle");
+    toggle.addEventListener("click", () => {
+      const isDark = document.documentElement.classList.contains("dark");
+      const next = isDark ? "light" : "dark";
+      applyTheme(next === "dark");
+      localStorage.setItem(THEME_KEY, next);
+    });
+  </script>
+</body>
+</html>

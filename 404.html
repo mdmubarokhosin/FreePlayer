@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0a0f1e" media="(prefers-color-scheme: dark)" />
+  <meta name="robots" content="noindex, follow" />
+  <title>404 — Movi Player</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/assets/tailwind.css" />
+  <link rel="stylesheet" href="/assets/bootstrap-icons.css" />
+  <style>
+    html, body { height: 100%; }
+    body {
+      background: #f6f8fc;
+      color: #0a0f1e;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    @media (prefers-color-scheme: dark) {
+      html:not(.light) body, html:not(.light) { background: #0a0f1e; color: #f4f5fb; }
+    }
+    html.dark body, html.dark { background: #0a0f1e; color: #f4f5fb; }
+    body::before {
+      content: "";
+      position: fixed;
+      width: 60vw; height: 60vw;
+      top: -20vw; right: -10vw;
+      border-radius: 50%;
+      filter: blur(120px);
+      background: radial-gradient(circle, #8a7cf2, transparent 70%);
+      opacity: 0.18;
+      z-index: 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      html:not(.light) body::before { opacity: 0.35; }
+    }
+    html.dark body::before { opacity: 0.35; }
+    .text-gradient {
+      background: linear-gradient(135deg, #8a7cf2 0%, #6c5dd3 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div class="text-center max-w-md relative z-10">
+    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#8a7cf2] to-[#6c5dd3] grid place-items-center mx-auto mb-6 shadow-lg shadow-purple-500/30">
+      <i class="bi bi-play-fill text-white text-2xl"></i>
+    </div>
+    <h1 class="text-7xl font-extrabold tracking-tighter mb-3 text-gradient">404</h1>
+    <p class="text-secondary dark:text-gray-300 text-base leading-relaxed mb-7">
+      That path doesn't exist. The player lives at the root — try
+      <code class="px-1.5 py-0.5 rounded bg-surface dark:bg-white/5 font-mono text-sm">/?url=&lt;video-link&gt;</code>
+      or
+      <code class="px-1.5 py-0.5 rounded bg-surface dark:bg-white/5 font-mono text-sm">/embed?url=&lt;video-link&gt;</code>.
+    </p>
+    <a href="/" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-br from-[#8a7cf2] to-[#6c5dd3] text-white text-sm font-semibold no-underline hover:shadow-lg hover:shadow-purple-500/40 hover:-translate-y-0.5 transition-all">
+      <i class="bi bi-arrow-left"></i> Back to player
+    </a>
+  </div>
+</body>
+</html>

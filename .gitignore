@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Cloudflare Wrangler local state
+.wrangler/
+
+# Tailwind build artifacts — the only OUTPUT is assets/tailwind.css.
+# Source for it lives in tw-build/, the Tailwind CLI binary lives in
+# tw-build/node_modules/ (large, regenerable on demand).
+tw-build/node_modules/
+tw-build/package.json
+tw-build/package-lock.json

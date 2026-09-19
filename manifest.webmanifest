@@ -1,0 +1,20 @@
+{
+  "name": "Movi Player",
+  "short_name": "Movi",
+  "description": "Self-hosted video player for MKV, HEVC, AV1, HDR, HLS, DASH. Embeddable via /embed?url=… on any page. Light theme by default.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8fc",
+  "theme_color": "#f6f8fc",
+  "orientation": "any",
+  "categories": ["multimedia", "video", "entertainment"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

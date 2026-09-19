@@ -1,0 +1,60 @@
+# Cloudflare Pages headers
+#
+# COOP/COEP strategy: was `require-corp`, switched to `credentialless`.
+#
+# Why the change: the previous deployment shipped COEP=require-corp,
+# which is the textbook SAB-enabling setting. But `require-corp` is
+# STRICTER than the cross-origin assets we use can satisfy:
+#
+#   - Tailwind CDN (cdn.tailwindcss.com, Vercel) sends CORS headers but
+#     NOT `Cross-Origin-Resource-Policy: cross-origin`. So under
+#     require-corp, the browser refused to apply the Tailwind script's
+#     generated styles, and the page fell back to browser-default
+#     serif font and unstyled layout. The same happened with Bootstrap
+#     Icons CSS — jsDelivr sends CORS but not CORP.
+#
+# `credentialless` (Chromium 96+, Firefox 90+, Safari 16+) is the
+# modern alternative:
+#   - Same SAB-unlocking behaviour as `require-corp`.
+#   - Cross-origin assets load WITHOUT needing their own CORP header,
+#     as long as they're fetched without credentials (cookies/HTTP
+#     auth). Tailwind CDN, jsDelivr, R2, S3 — all are no-credentials
+#     public CDNs, so they all work.
+#   - Only catches credentials-bearing cross-origin requests, which
+#     we don't make.
+#
+# Net: same SAB availability, no broken Tailwind.
+#
+# For the embed page specifically, `credentialless` also means a host
+# page embedding our /embed in an iframe can still benefit from SAB
+# even if its own origin is different — as long as the host doesn't
+# try to share credentials with us via the iframe (which it has no
+# reason to).
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()
+
+# The /embed endpoint is designed to be iframed from any origin.
+# Explicit allow framing — no SAMEORIGIN restriction.
+/embed
+  X-Frame-Options: ALLOWALL
+
+# Immutable assets — JS + WASM + CSS + fonts are version-pinned. A
+# year-long max-age is conservative; the browser skips revalidation
+# entirely on revisit.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Web app manifest — small file, cache for an hour.
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600
+  Content-Type: application/manifest+json
+
+# HTML pages can change on every deploy, so revalidate each time.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate

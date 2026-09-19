@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Don't index the embed endpoint — it's meant to live inside iframes
+# on other sites, not to be a search-result destination. The landing
+# page (/) is the canonical indexable URL.
+Disallow: /embed
+Disallow: /embed.html
+
+Sitemap: /sitemap.xml
